@@ -1,14 +1,12 @@
 # temperature-collector-app
 
-Agrarian temperature-collector-app Application for the Agrarian ecosystem.
+Agrarian temperature-collector-app Application
 
 ## Description
 
-This application provides temperature-collector-app functionality for the Agrarian farming ecosystem.
+This is a simple FastAPI application for the Agrarian ecosystem.
 
-## Development
-
-### Local Development
+## Local Development
 
 ```bash
 # Install dependencies
@@ -18,7 +16,7 @@ pip install -r requirements.txt
 python src/app.py
 ```
 
-### Docker
+## Docker
 
 ```bash
 # Build the image
@@ -30,13 +28,14 @@ docker run -p 80:80 temperature-collector-app
 
 ## CI/CD
 
-This repository uses GitHub Actions for CI/CD:
+This repository uses a simple CI/CD pipeline that:
+- Tests application compilation
+- Checks for hardcoded secrets
+- Builds Docker image
+- Pushes to GitHub Container Registry
+- Tests the Docker image
 
-- **Build**: Multi-arch Docker images (AMD64/ARM64)
-- **Security**: Trivy vulnerability scanning
-- **SBOM**: Software Bill of Materials generation
-- **Registry**: GitHub Container Registry (GHCR)
+## Endpoints
 
-## Deployment
-
-The application is deployed to the Agrarian k3s cluster using FluxCD GitOps.
+- `GET /` - Main endpoint
+- `GET /health` - Health check

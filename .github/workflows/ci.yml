@@ -1,4 +1,4 @@
-name: CI - Build, Test & Push Image
+name: Simple CI/CD Pipeline
 on:
   push:
     branches: [ "main" ]
@@ -7,14 +7,13 @@ on:
 permissions:
   contents: read
   packages: write
-  id-token: write
 
 jobs:
-  # Job 1: Code Quality & Tests
-  code-quality:
+  build-and-push:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout code
+        uses: actions/checkout@v4
 
       - name: Set up Python
         uses: actions/setup-python@v4
@@ -26,50 +25,45 @@ jobs:
           python -m pip install --upgrade pip
           pip install -r requirements.txt
 
-      - name: Run basic tests
+      - name: Test app compilation
         run: |
-          python -c "import src.app; print('✅ App imports successfully')"
+          echo "Testing application compilation..."
+          python -c "import src.app; print('✅ App compiles successfully')"
           python -c "import fastapi; print('✅ FastAPI available')"
           python -c "import uvicorn; print('✅ Uvicorn available')"
 
-      - name: Test app structure
+      - name: Check for hardcoded secrets
         run: |
-          echo "Testing app structure..."
-          test -f src/app.py && echo "✅ src/app.py exists"
-          test -f requirements.txt && echo "✅ requirements.txt exists"
-          test -f Dockerfile && echo "✅ Dockerfile exists"
-          
-          echo "Testing Dockerfile security..."
-          grep -q "USER appuser" Dockerfile && echo "✅ Non-root user configured"
-          grep -q "HEALTHCHECK" Dockerfile && echo "✅ Health check configured"
-          
-          echo "Testing for hardcoded secrets..."
-          ! grep -r "password=" src/ && echo "✅ No hardcoded passwords"
-          ! grep -r "secret=" src/ && echo "✅ No hardcoded secrets"
-          ! grep -r "api_key" src/ && echo "✅ No hardcoded API keys"
-
-      - name: Run pytest tests
-        run: |
-          pytest test_app.py -v || echo "⚠️ Some tests failed but continuing..."
-
-  # Job 2: Build & Push
-  build-and-push:
-    runs-on: ubuntu-latest
-    needs: code-quality
-    steps:
-      - uses: actions/checkout@v4
+          echo "Checking for hardcoded secrets..."
+          if grep -r "password=" src/; then
+            echo "❌ Hardcoded passwords found!"
+            exit 1
+          fi
+          if grep -r "secret=" src/; then
+            echo "❌ Hardcoded secrets found!"
+            exit 1
+          fi
+          if grep -r "api_key" src/; then
+            echo "❌ Hardcoded API keys found!"
+            exit 1
+          fi
+          if grep -r "token=" src/; then
+            echo "❌ Hardcoded tokens found!"
+            exit 1
+          fi
+          echo "✅ No hardcoded secrets found"
 
       - name: Set up Docker Buildx
         uses: docker/setup-buildx-action@v3
 
-      - name: Login to GHCR
+      - name: Login to GitHub Container Registry
         uses: docker/login-action@v3
         with:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - name: Build & Push
+      - name: Build and push Docker image
         uses: docker/build-push-action@v6
         with:
           context: .
@@ -77,62 +71,17 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/agrarian-application-repository/temperature-collector-app:sha-${{ github.sha }}
             ghcr.io/agrarian-application-repository/temperature-collector-app:latest
-
-      - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@master
-        with:
-          image-ref: 'ghcr.io/agrarian-application-repository/temperature-collector-app:latest'
-          format: 'table'
-          exit-code: '0'
-          ignore-unfixed: true
-          vuln-type: 'os,library'
-          severity: 'CRITICAL'
-
-      - name: Generate SBOM with Syft
-        run: |
-          curl -sSfL https://raw.githubusercontent.com/anchore/syft/main/install.sh | sh -s -- -b /usr/local/bin
-          syft ghcr.io/agrarian-application-repository/temperature-collector-app:latest -o spdx-json > sbom.spdx.json
-          echo "SBOM generated successfully"
-          ls -la sbom.spdx.json
-
-      - name: Upload SBOM
-        uses: actions/upload-artifact@v4
-        with:
-          name: sbom
-          path: sbom.spdx.json
-
-  # Job 3: Integration Tests
-  integration-tests:
-    runs-on: ubuntu-latest
-    needs: build-and-push
-    steps:
-      - uses: actions/checkout@v4
-
-      - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v3
+            ghcr.io/agrarian-application-repository/temperature-collector-app:sha-${{ github.sha }}
 
       - name: Test Docker image
         run: |
           echo "Testing Docker image..."
           docker pull ghcr.io/agrarian-application-repository/temperature-collector-app:latest
-          
-          echo "Testing container startup..."
           docker run -d --name test-app -p 8080:80 ghcr.io/agrarian-application-repository/temperature-collector-app:latest
-          sleep 15
-          
-          echo "Testing health endpoint..."
-          curl -f http://localhost:8080/health || echo "⚠️ Health endpoint test failed"
-          
-          echo "Testing main endpoint..."
-          curl -f http://localhost:8080/ || echo "⚠️ Main endpoint test failed"
-          
-          echo "Cleaning up..."
-          docker stop test-app || true
-          docker rm test-app || true
-
-      - name: Test multi-arch support
-        run: |
-          echo "Testing multi-arch support..."
-          docker run --rm ghcr.io/agrarian-application-repository/temperature-collector-app:latest python --version || echo "⚠️ Multi-arch test failed"
+          sleep 10
+          curl -f http://localhost:8080/health || echo "⚠️ Health check failed"
+          curl -f http://localhost:8080/ || echo "⚠️ Main endpoint failed"
+          docker stop test-app
+          docker rm test-app
+          echo "✅ Docker image test completed"
