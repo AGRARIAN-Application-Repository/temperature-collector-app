@@ -1,6 +1,9 @@
 name: CI Pipeline
+
 on:
   push:
+    branches: [ "main" ]
+  pull_request:
     branches: [ "main" ]
   workflow_dispatch:
 
@@ -29,9 +32,7 @@ jobs:
       - name: Test application compilation
         run: |
           echo "🧪 Testing application compilation..."
-          python -c "import src.app; print('✅ App compiles successfully')"
-          python -c "import fastapi; print('✅ FastAPI available')"
-          python -c "import uvicorn; print('✅ Uvicorn available')"
+          python -c "import sys; sys.path.append('src'); from app import app; print('✅ App compiles successfully')"
 
       - name: Check for hardcoded passwords
         run: |
@@ -80,8 +81,8 @@ jobs:
           push: true
           platforms: linux/amd64,linux/arm64
           tags: |
-            ghcr.io/agrarian-application-repository/temperature-collector-app:latest
-            ghcr.io/agrarian-application-repository/temperature-collector-app:sha-${{ github.sha }}
+            ghcr.io/agrarian-application-repository/${{ github.event.repository.name }}:latest
+            ghcr.io/agrarian-application-repository/${{ github.event.repository.name }}:sha-${{ github.sha }}
 
   push-to-github-packages:
     name: Push to GitHub Package
@@ -101,14 +102,14 @@ jobs:
       - name: Test Docker image
         run: |
           echo "🐳 Testing Docker image..."
-          echo "Pulling image: ghcr.io/agrarian-application-repository/temperature-collector-app:latest"
-          docker pull ghcr.io/agrarian-application-repository/temperature-collector-app:latest || {
+          echo "Pulling image: ghcr.io/agrarian-application-repository/${{ github.event.repository.name }}:latest"
+          docker pull ghcr.io/agrarian-application-repository/${{ github.event.repository.name }}:latest || {
             echo "❌ Failed to pull Docker image"
             exit 1
           }
           
           echo "Starting container..."
-          docker run -d --name test-app -p 8080:80 ghcr.io/agrarian-application-repository/temperature-collector-app:latest || {
+          docker run -d --name test-app -p 8080:80 ghcr.io/agrarian-application-repository/${{ github.event.repository.name }}:latest || {
             echo "❌ Failed to start container"
             exit 1
           }
@@ -134,6 +135,7 @@ jobs:
       - name: Verify image in GitHub Packages
         run: |
           echo "📦 Verifying image in GitHub Packages..."
-          echo "Image: ghcr.io/agrarian-application-repository/temperature-collector-app:latest"
+          echo "Image: ghcr.io/agrarian-application-repository/${{ github.event.repository.name }}:latest"
           echo "✅ Image successfully pushed to GitHub Packages"
           echo "🔗 View packages at: https://github.com/orgs/AGRARIAN-Application-Repository/packages"
+
